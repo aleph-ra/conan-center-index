@@ -1,9 +1,7 @@
 from conan import ConanFile
 from conan.tools.cmake import CMake, CMakeToolchain, CMakeDeps, cmake_layout
-from conan.tools.files import get, copy, rmdir
+from conan.tools.files import get, copy, rmdir, replace_in_file
 from conan.tools.build import check_min_cppstd
-from conan.tools.microsoft import is_msvc
-from conan.errors import ConanInvalidConfiguration
 import os
 
 required_conan_version = ">=2.1"
@@ -26,29 +24,35 @@ class OmplConan(ConanFile):
         cmake_layout(self, src_folder="src")
 
     def requirements(self):
-        self.requires("eigen/[>=3.4.0 <4]", transitive_headers=True)
-        self.requires("boost/1.88.0", transitive_headers=True)
+        # ompl/base/spaces/special/SphereStateSpace.h:45 #include <Eigen/Core>
+        # ompl/datastructures/Grid.h:40 #include <Eigen/Core>
+        self.requires("eigen/[>=3.4.0 <5]", transitive_headers=True)
+        # ompl/base/PlannerData.h:48 #include <boost/serialization/access.hpp>
+        # ompl/base/spaces/constraint/AtlasStateSpace.h:48 #include <boost/math/constants/constants.hpp>
+        self.requires("boost/[>=1.85.0 <1.92.0]", transitive_headers=True)
 
     def validate(self):
         check_min_cppstd(self, 17)
-        if is_msvc(self) and self.options.shared:
-            # INFO https://github.com/ompl/ompl/blob/1.7.0/src/ompl/CMakeLists.txt#L36
-            raise ConanInvalidConfiguration('Only static library is provided for MSVC compiler. Use -o "ompl/*:shared=False"')
-        elif not is_msvc(self) and not self.options.shared:
-            raise ConanInvalidConfiguration('Only shared library is provided for non-MSVC compilers. Use -o "ompl/*:shared=True"')
 
     def source(self):
         get(self, **self.conan_data["sources"][self.version], strip_root=True)
+        # https://github.com/ompl/ompl/blob/2.0.0/CMakeModules/OMPLCompilerSettings.cmake#L1
+        replace_in_file(self, os.path.join(self.source_folder, "CMakeModules", "OMPLCompilerSettings.cmake"), "set(CMAKE_CXX_STANDARD 17)", "")
+        # https://github.com/ompl/ompl/blob/2.0.0/CMakeModules/OMPLCompilerSettings.cmake#L37
+        replace_in_file(self, os.path.join(self.source_folder, "CMakeModules", "OMPLCompilerSettings.cmake"), "add_definitions(-fPIC)", "")
 
     def generate(self):
         tc = CMakeToolchain(self)
-        tc.cache_variables["OMPL_BUILD_PYBINDINGS"] = False
+        tc.cache_variables["OMPL_BUILD_SHARED"] = self.options.shared
+        tc.cache_variables["OMPL_BUILD_PYTHON_BINDINGS"] = False
         tc.cache_variables["OMPL_BUILD_DEMOS"] = False
         tc.cache_variables["OMPL_BUILD_TESTS"] = False
-        tc.cache_variables["OMPL_BUILD_PYTESTS"] = False
-        tc.cache_variables["OMPL_REGISTRATION"] = False
+        tc.cache_variables["OMPL_BUILD_VAMP"] = False
         tc.cache_variables["OMPL_VERSIONED_INSTALL"] = False
-        tc.cache_variables["CMAKE_DISABLE_FIND_PACKAGE_castxml"] = True
+        # INFO: Disable dependencies that are not needed for ompl library
+        # github.com/ompl/ompl/blob/2.0.0/CMakeModules/OMPLDependencies.cmake
+        tc.cache_variables["CMAKE_DISABLE_FIND_PACKAGE_Python"] = True
+        tc.cache_variables["CMAKE_DISABLE_FIND_PACKAGE_yaml-cpp"] = True
         tc.cache_variables["CMAKE_DISABLE_FIND_PACKAGE_Doxygen"] = True
         tc.cache_variables["CMAKE_DISABLE_FIND_PACKAGE_spot"] = True
         tc.cache_variables["CMAKE_DISABLE_FIND_PACKAGE_Triangle"] = True
@@ -72,5 +76,8 @@ class OmplConan(ConanFile):
 
     def package_info(self):
         self.cpp_info.libs = ["ompl"]
+        self.cpp_info.requires = ["eigen::eigen", "boost::headers", "boost::serialization"]
         if self.settings.os in ["Linux", "FreeBSD"]:
             self.cpp_info.system_libs = ["m", "pthread"]
+        elif self.settings.os == "Windows":
+            self.cpp_info.system_libs = ["psapi", "ws2_32"]
