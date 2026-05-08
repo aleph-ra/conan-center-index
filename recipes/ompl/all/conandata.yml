@@ -1,4 +1,4 @@
 sources:
   "2.0.0":
-    url: "https://github.com/ompl/ompl/archive/2.0.0.tar.gz"
-    sha256: "643d3218aca72ea9007daea0b5871d534b9cd3239d2e4cc140b152be86c8eb2c"
+    url: "https://github.com/ompl/ompl/releases/download/2.0.0/ompl-2.0.0-Source.tar.gz"
+    sha256: "7b6032ca69d0c69280ce3872737c1c6ff6105cfa38769befb57dd15610c90f75"
