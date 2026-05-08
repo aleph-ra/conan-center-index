@@ -2,3 +2,7 @@ sources:
   "2.0.0":
     url: "https://github.com/ompl/ompl/releases/download/2.0.0/ompl-2.0.0-Source.tar.gz"
     sha256: "7b6032ca69d0c69280ce3872737c1c6ff6105cfa38769befb57dd15610c90f75"
+  "1.7.0":
+    # The 1.7.0 release does not have library sources, only app
+    url: "https://github.com/ompl/ompl/archive/1.7.0.tar.gz"
+    sha256: "e2e2700dfb0b4c2d86e216736754dd1b316bd6a46cc8818e1ffcbce4a388aca9"

@@ -2,6 +2,9 @@ from conan import ConanFile
 from conan.tools.cmake import CMake, CMakeToolchain, CMakeDeps, cmake_layout
 from conan.tools.files import get, copy, rmdir, replace_in_file
 from conan.tools.build import check_min_cppstd
+from conan.errors import ConanInvalidConfiguration
+from conan.tools.microsoft import is_msvc
+from conan.tools.scm import Version
 import os
 
 required_conan_version = ">=2.1"
@@ -33,26 +36,47 @@ class OmplConan(ConanFile):
 
     def validate(self):
         check_min_cppstd(self, 17)
+        if Version(self.version) < "2.0.0":
+            if is_msvc(self) and self.options.shared:
+                # INFO https://github.com/ompl/ompl/blob/1.7.0/src/ompl/CMakeLists.txt#L36
+                raise ConanInvalidConfiguration('Only static library is provided for MSVC compiler. Use -o "ompl/*:shared=False"')
+            elif not is_msvc(self) and not self.options.shared:
+                raise ConanInvalidConfiguration('Only shared library is provided for non-MSVC compilers. Use -o "ompl/*:shared=True"')
+        else:
+            if is_msvc(self):
+                # FIXME: https://github.com/ompl/ompl/issues/1423
+                raise ConanInvalidConfiguration('Does not support MSVC compiler due M_PI missing definition. See https://github.com/ompl/ompl/issues/1423')
 
     def source(self):
         get(self, **self.conan_data["sources"][self.version], strip_root=True)
         # https://github.com/ompl/ompl/blob/2.0.0/CMakeModules/OMPLCompilerSettings.cmake#L1
-        replace_in_file(self, os.path.join(self.source_folder, "CMakeModules", "OMPLCompilerSettings.cmake"), "set(CMAKE_CXX_STANDARD 17)", "")
+        cmakefile = "CompilerSettings.cmake" if Version(self.version) < "2.0.0" else "OMPLCompilerSettings.cmake"
+        replace_in_file(self, os.path.join(self.source_folder, "CMakeModules", cmakefile), "set(CMAKE_CXX_STANDARD 17)", "")
         # https://github.com/ompl/ompl/blob/2.0.0/CMakeModules/OMPLCompilerSettings.cmake#L37
-        replace_in_file(self, os.path.join(self.source_folder, "CMakeModules", "OMPLCompilerSettings.cmake"), "add_definitions(-fPIC)", "")
+        replace_in_file(self, os.path.join(self.source_folder, "CMakeModules", cmakefile), "add_definitions(-fPIC)", "")
+        if Version(self.version) < "2.0.0":
+            # INFO: Boost::system moved to header-only
+            replace_in_file(self, os.path.join(self.source_folder, "src", "ompl", "CMakeLists.txt"), "Boost::system", "Boost::headers")
 
     def generate(self):
         tc = CMakeToolchain(self)
-        tc.cache_variables["OMPL_BUILD_SHARED"] = self.options.shared
-        tc.cache_variables["OMPL_BUILD_PYTHON_BINDINGS"] = False
+        if Version(self.version) < "2.0.0":
+            tc.cache_variables["CMAKE_DISABLE_FIND_PACKAGE_castxml"] = True
+            tc.cache_variables["OMPL_REGISTRATION"] = False
+            tc.cache_variables["OMPL_BUILD_PYTESTS"] = False
+            tc.cache_variables["OMPL_BUILD_PYBINDINGS"] = False
+        else:
+            tc.cache_variables["OMPL_BUILD_SHARED"] = self.options.shared
+            tc.cache_variables["OMPL_BUILD_VAMP"] = False
+            tc.cache_variables["CMAKE_DISABLE_FIND_PACKAGE_Python"] = True
+            tc.cache_variables["CMAKE_DISABLE_FIND_PACKAGE_yaml-cpp"] = True
+            tc.cache_variables["OMPL_BUILD_PYTHON_BINDINGS"] = False
+
         tc.cache_variables["OMPL_BUILD_DEMOS"] = False
         tc.cache_variables["OMPL_BUILD_TESTS"] = False
-        tc.cache_variables["OMPL_BUILD_VAMP"] = False
         tc.cache_variables["OMPL_VERSIONED_INSTALL"] = False
         # INFO: Disable dependencies that are not needed for ompl library
         # github.com/ompl/ompl/blob/2.0.0/CMakeModules/OMPLDependencies.cmake
-        tc.cache_variables["CMAKE_DISABLE_FIND_PACKAGE_Python"] = True
-        tc.cache_variables["CMAKE_DISABLE_FIND_PACKAGE_yaml-cpp"] = True
         tc.cache_variables["CMAKE_DISABLE_FIND_PACKAGE_Doxygen"] = True
         tc.cache_variables["CMAKE_DISABLE_FIND_PACKAGE_spot"] = True
         tc.cache_variables["CMAKE_DISABLE_FIND_PACKAGE_Triangle"] = True
