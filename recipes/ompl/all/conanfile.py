@@ -76,7 +76,8 @@ class OmplConan(ConanFile):
 
     def package_info(self):
         self.cpp_info.libs = ["ompl"]
-        self.cpp_info.requires = ["eigen::eigen", "boost::headers", "boost::serialization"]
+        self.cpp_info.requires = ["eigen::eigen", "boost::headers", "boost::serialization",
+                                  "boost::math", "boost::graph", "boost::random", "boost::iostreams"]
         if self.settings.os in ["Linux", "FreeBSD"]:
             self.cpp_info.system_libs = ["m", "pthread"]
         elif self.settings.os == "Windows":
